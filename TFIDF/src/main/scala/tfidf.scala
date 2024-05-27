@@ -1,14 +1,23 @@
 import org.apache.spark.{SparkConf, SparkContext}
-
-import org.apache.spark.mllib.feature.{HashingTF, IDF}
-import org.apache.spark.mllib.linalg.Vector
-
-import org.apache.spark.rdd.RDD
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer}
+import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.functions._
 
 object tfidf {
 
   def main(args: Array[String]): Unit = {
   
+
+    // Check if the input path is provided
+    if (args.length < 1) {
+      println("Usage: ./run-spark.sh <File_with_main_class> <number_of_threads> <name_of_jar_file> <fileset path>")
+      System.exit(1)
+    }
+    // Use the input path from command line arguments
+    val inputPath = args(0)
+    // Use the output path from command line arguments
+    //val outputPath = args(1)
     // Create spark configuration
     val sparkConf = new SparkConf()
       .setMaster("local[2]")
@@ -16,38 +25,43 @@ object tfidf {
 
     // Create spark context  
     val sc = new SparkContext(sparkConf) 
+    // Create SQLContext
+    val sqlContext = new SQLContext(sc)
+    // Read documents from input path
+    val documents = sc.textFile(s"file:///$inputPath").map(_.split(" ").toSeq)
     
-    // Check if the input path is provided
-    if (args.length < 1) {
-      println("Usage: ./run-spark.sh <File_with_main_class> <number_of_threads> <name_of_jar_file> <fileset path>")
-      System.exit(1)
-    }
+    // Convert RDD to DataFrame
+   import sqlContext.implicits._
+    val data = documents.zipWithIndex.map { case (words, id) => (id, words.mkString(" ")) }.toDF("label", "text")
 
-    // Use the input path from command line arguments
-    val inputPath = args(0)
-
-    val documents: RDD[Seq[String]] = sc.textFile(s"file:///$inputPath")
-    .map(_.split(" ").toSeq)
+    // Tokenize text into words
+    val tokenizer = new Tokenizer().setInputCol("text").setOutputCol("words")
+    val wordsData = tokenizer.transform(data)
     
+    // Apply HashingTF to convert words into feature vectors
     val hashingTF = new HashingTF()
-    val tf: RDD[Vector] = hashingTF.transform(documents)
-    
-    tf.cache()
-    val idf = new IDF().fit(tf)
-    val tfidf: RDD[Vector] = idf.transform(tf)
+      .setInputCol("words")
+      .setOutputCol("rawFeatures")
+      .setNumFeatures(1000) // Adjust as needed
+    val featurizedData = hashingTF.transform(wordsData)
 
-    // spark.mllib IDF implementation provides an option for ignoring terms which occur in less than
-    // a minimum number of documents. In such cases, the IDF for these terms is set to 0.
-    // This feature can be used by passing the minDocFreq value to the IDF constructor.
-    val idfIgnore = new IDF(minDocFreq = 2).fit(tf)
-    val tfidfIgnore: RDD[Vector] = idfIgnore.transform(tf)
-    
-    println("tfidf: ")
-    tfidf.collect().foreach(x => println(x))
+    // Compute IDF
+    val idf = new IDF()
+      .setInputCol("rawFeatures")
+      .setOutputCol("features")
+    val idfModel = idf.fit(featurizedData)
+    val rescaledData = idfModel.transform(featurizedData)
 
-    println("tfidfIgnore: ")
-    tfidfIgnore.collect().foreach(x => println(x))
-    
+    // Convert Sparse Vector to String
+    val vectorToString = udf((vector: Vector) => vector.toString)
+
+    // Add a column with the string representation of features
+    val readableData = rescaledData.withColumn("featuresString", vectorToString(col("features")))
+
+    // Show results
+    readableData.select("label", "features").show(truncate = false)
+
+
     sc.stop()
   }
-}
+} 
