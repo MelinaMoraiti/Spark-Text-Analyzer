@@ -7,8 +7,6 @@ import org.apache.spark.sql.functions._
 object tfidf {
 
   def main(args: Array[String]): Unit = {
-  
-
     // Check if the input path is provided
     if (args.length < 1) {
       println("Usage: ./run-spark.sh <File_with_main_class> <number_of_threads> <name_of_jar_file> <fileset path>")
@@ -60,7 +58,6 @@ object tfidf {
 
     // Show results
     readableData.select("label", "features").show(truncate = false)
-
 
     sc.stop()
   }
