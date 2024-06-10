@@ -30,10 +30,10 @@ object tfidf {
     
     // Convert RDD to DataFrame
    import sqlContext.implicits._
-    val data = documents.zipWithIndex.map { case (words, id) => (id, words.mkString(" ")) }.toDF("label", "text")
+    val data = documents.zipWithIndex.map { case (words, id) => (id, words.mkString(" ")) }.toDF("label", "file_contend")
 
     // Tokenize text into words
-    val tokenizer = new Tokenizer().setInputCol("text").setOutputCol("words")
+    val tokenizer = new Tokenizer().setInputCol("file_content").setOutputCol("words")
     val wordsData = tokenizer.transform(data)
     
     // Apply HashingTF to convert words into feature vectors
@@ -45,13 +45,7 @@ object tfidf {
     val idfModel = idf.fit(featurizedData)
     val rescaledData = idfModel.transform(featurizedData)
 
-    // Convert Sparse Vector to String
-    val vectorToString = udf((vector: Vector) => vector.toString)
-
-    // Add a column with the string representation of features
-    val readableData = rescaledData.withColumn("featuresString", vectorToString(col("features")))
-
-    // Show results
+    // Show all results without truncating
     readableData.select("label", "features").show(truncate = false)
 
     sc.stop()
