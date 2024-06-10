@@ -37,16 +37,11 @@ object tfidf {
     val wordsData = tokenizer.transform(data)
     
     // Apply HashingTF to convert words into feature vectors
-    val hashingTF = new HashingTF()
-      .setInputCol("words")
-      .setOutputCol("rawFeatures")
-      .setNumFeatures(1000) // Adjust as needed
+    val hashingTF = new HashingTF().setInputCol("words").setOutputCol("rawFeatures").setNumFeatures(12) 
     val featurizedData = hashingTF.transform(wordsData)
 
     // Compute IDF
-    val idf = new IDF()
-      .setInputCol("rawFeatures")
-      .setOutputCol("features")
+    val idf = new IDF().setInputCol("rawFeatures").setOutputCol("features")
     val idfModel = idf.fit(featurizedData)
     val rescaledData = idfModel.transform(featurizedData)
 
